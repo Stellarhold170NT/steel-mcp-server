@@ -209,3 +209,15 @@ against Steel's API and Chrome, and [RESEARCH.md](RESEARCH.md) the decisions beh
 Contributions are welcome: fork, branch, and open a pull request that says what it changes and why.
 For bugs, [open an issue](https://github.com/steel-dev/steel-mcp-server/issues) with the tool you
 called and the error text.
+
+---
+
+## Tai lieu phan tich (fork notes)
+
+- [REVIEW-VI.md](REVIEW-VI.md) - review kien truc + 5 patch de xuat (P1-P5) cho discover reliability
+- [docs/CASES-100.md](docs/CASES-100.md) - 100 case that (de->kho) phu toan bo tool surface + ma tran phu tool
+- [docs/BUGS-AND-GAPS.md](docs/BUGS-AND-GAPS.md) - 9 BUG (chung cu file:line + so do thuc chien) + 15 GAP -> tinh nang bo sung
+- [docs/PLAYWRIGHT-PARITY.md](docs/PLAYWRIGHT-PARITY.md) - inventory Playwright + bang so sanh nang luc, verdict ✅/⚠️/❌
+
+Ban fork loai tru .github/ (PAT thieu scope workflow) va 2 mp4 demo ~78MB (gioi han push).
+Lich su day du: steel-dev/steel-mcp-server@3ceb5c3.
