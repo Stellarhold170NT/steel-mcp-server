@@ -180,3 +180,14 @@ session_release, handoff, live_view, replay.
 ## PHÂN BỐ ĐỘ KHÓ
 ★×16 · ★★×18 · ★★★×36 · ★★★★×21 · ★★★★★×9 — tăng dần từ "đọc trang tĩnh" tới
 "săn vé giá sai trong TTL" và "form 58 input lazy-render" (đã có số đo thực chiến).
+
+
+## INDEX ĐỘ KHÓ (khó → dễ — nhìn một trang)
+
+- **★★★★★ (9):** 20 SVG seat-map · 27 Grab WebGL · 28 Trello drag · 33 Excalidraw drag · 50 Turnstile · 51 reCAPTCHA · 78 Amazon fence · 81 raffle 1s · 83 săn vé TTL 3' · 84 dịch vụ công cao điểm · 86 Tiki COD · 87 Agoda confirm · 88 Upwork job · 89 vLXP 30/30 thực chiến · 95 IELTS BC
+- **★★★★ (21):** 16 17 18 (auth+OTP) · 19 Vietjet multi-form · 21 Agoda · 22 upload BHXH · 25 Maps canvas · 26 Zalo OA · 29 30 31 (Notion/Sheets/Docs) · 32 Figma · 34 CodeSandbox · 36 Calendar drag · 37 Gmail · 39 42 upload · 45 OAuth · 48 email flow · 55 chart diff · 58 replay QA · 66 dừng-an-toàn · 69 so-giá-5-site · 75 2 session · 76 lazy batch · 77 recovery · 79 LinkedIn · 82 Steam · 85 API ẩn · 90 WP media · 92 30×5 sheet · 93 Zalo ghim
+- **★★★ (36):** 2 3 4 5 7 8 10 12 13 14 15 (nền tảng TMVN) · 23 24 · 35 datatables · 38 X · 40 swipe · 41 modal-2-tầng · 44 basic-auth · 46 47 · 49 cookie · 52 429-backoff · 54 PDF-đối-chiếu · 56 57 59 (chụp DSL) · 60 DOM-diff · 61 handoff · 62 live-view · 63 replay · 64 profile · 65 diagnostics · 68 batch-15 · 70 dead-link · 71 watchdog · 72 form-58 · 73 áp-lực · 74 verify-batch · 97 a11y · 100 chính-tả
+- **★★ (18):** 1 · 6 · 9 · 70(hạ) · 88-form-đơn · 23(hạ) · 24 · 53 · 98 · 99 · 91 · 94 · 35 · 12 · 3 · 49 · 30-đơn · 36-đơn
+- **★ (16):** 1 (VnExpress) · 24 (VietnamPost) · 53 · 98 · 99 · 1-type · navigate-only family (70/98/99) · các trường "1 bấm" trong A: 1 · 24 · 53 · 98 · 99 · 12 · 23 · 49 · 35 · 91 · 94
+
+> Dải ★★★★★ tập trung đúng bản đồ điểm yếu: GAP-1 (drag) · GAP-2 (upload) · GAP-5/6 (network/console) · GAP-9 (emulation/touch) · GAP-13 (anti-bot→handoff) · BUG-1/3/5/7 (click-wall, .checked, stale-ref, session-timeout).

@@ -221,3 +221,5 @@ called and the error text.
 
 Ban fork loai tru .github/ (PAT thieu scope workflow) va 2 mp4 demo ~78MB (gioi han push).
 Lich su day du: steel-dev/steel-mcp-server@3ceb5c3.
+
+- [docs/PLAYWRIGHT-API-INVENTORY.md](docs/PLAYWRIGHT-API-INVENTORY.md) - inventory method-level đầy đủ (~315 methods trích sống từ playwright.dev) + parity đếm được 60/10/30%s
