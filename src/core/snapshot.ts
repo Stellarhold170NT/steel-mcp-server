@@ -517,6 +517,31 @@ function synthesizeName(facts: DomFacts | undefined): string {
     return candidates.find(candidate => candidate && candidate.trim().length > 0)?.trim() ?? '';
 }
 
+/**
+ * Names a control by the text of the elements its aria-labelledby points at.
+ *
+ * Widgets that park the visible label in a separate element and reference it with
+ * aria-labelledby are common; without this lookup the input resolves to no name of its
+ * own and the model cannot tell which answer a checkbox belongs to.
+ */
+function labelledByName(
+    nodeFacts: DomFacts | undefined,
+    frameId: string,
+    byDomId: Map<string, number>,
+    axByBackend: Map<string, AxNode>
+): string {
+    const references = (nodeFacts?.attributes['aria-labelledby'] ?? '').trim().split(/\s+/).filter(Boolean);
+    if (references.length === 0) return '';
+    const names: string[] = [];
+    for (const id of references) {
+        const backendNodeId = byDomId.get(id);
+        if (backendNodeId === undefined) continue;
+        const text = cleanText(asString(axByBackend.get(`${frameId}\0${backendNodeId}`)?.name?.value));
+        if (text !== '') names.push(text);
+    }
+    return names.join(' ');
+}
+
 function cleanText(value: string): string {
     return defangMarkdownLinks(stripInvisible(value)).replace(/\s+/g, ' ').trim();
 }
@@ -714,6 +739,21 @@ export class PageState {
         for (const [frameId, frameNodes] of axByFrame) {
             for (const node of frameNodes) byId.set(axKey(frameId, node.nodeId), node);
         }
+        // aria-labelledby speaks in DOM ids while names live in the AX tree; both indexes
+        // together let a control be named by the text of elements it only references.
+        const axByBackend = new Map<string, AxNode>();
+        for (const [frameId, frameNodes] of axByFrame) {
+            for (const node of frameNodes) {
+                if (node.backendDOMNodeId !== undefined) {
+                    axByBackend.set(`${frameId}\0${node.backendDOMNodeId}`, node);
+                }
+            }
+        }
+        const byDomId = new Map<string, number>();
+        for (const [backendNodeId, domFacts] of facts) {
+            const id = domFacts.attributes.id?.trim();
+            if (id) byDomId.set(id, backendNodeId);
+        }
         const rootsOf = (frameId: string): AxNode[] =>
             (axByFrame.get(frameId) ?? []).filter(
                 node => node.parentId === undefined || !byId.has(axKey(frameId, node.parentId))
@@ -751,8 +791,11 @@ export class PageState {
             const nodeFacts = backendNodeId === undefined ? undefined : facts.get(backendNodeId);
 
             const accessibleName = cleanText(asString(axNode.name?.value));
-            const inferredName = accessibleName ? '' : cleanText(synthesizeName(nodeFacts));
-            const name = accessibleName || inferredName;
+            const labelledName =
+                accessibleName === '' ? labelledByName(nodeFacts, frameId, byDomId, axByBackend) : '';
+            const inferredName =
+                accessibleName === '' && labelledName === '' ? cleanText(synthesizeName(nodeFacts)) : '';
+            const name = accessibleName || labelledName || inferredName;
 
             const focusable =
                 axNode.properties?.some(property => property.name === 'focusable' && property.value?.value === true) ??

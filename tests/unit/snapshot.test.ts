@@ -86,7 +86,41 @@ describe('PageState.capture — which nodes earn a ref', () => {
         expect(button?.ref).toBe('@e1');
     });
 
-    it('withholds a ref from a node with pointer-events none, but keeps it in the text', async () => {
+    it('names an input by the text of the elements its aria-labelledby references', async () => {
+        const labelB: FixtureNode = {
+            tag: 'SPAN',
+            backendNodeId: 21,
+            role: 'generic',
+            name: 'Answer B',
+            bounds: [100, 10, 80, 20],
+            attributes: { id: 'lbl-b' },
+        };
+        const labelC: FixtureNode = {
+            tag: 'SPAN',
+            backendNodeId: 22,
+            role: 'generic',
+            name: 'preferred',
+            bounds: [100, 32, 60, 18],
+            attributes: { id: 'lbl-c' },
+        };
+        const input: FixtureNode = {
+            tag: 'INPUT',
+            backendNodeId: 23,
+            role: 'checkbox',
+            name: '',
+            bounds: [100, 60, 20, 20],
+            attributes: { 'aria-labelledby': 'lbl-b lbl-c' },
+        };
+        const { session } = fixtureSession(page([labelB, labelC, input]));
+        const snapshot = await new PageState().capture(session, {});
+
+        // The input carries no name of its own; the widgets park the label in spans the
+        // control only references, so the name is assembled from those referenced texts.
+        expect(snapshot.nodes.find(node => node.role === 'checkbox')?.name).toBe('Answer B preferred');
+    });
+
+    
+it('withholds a ref from a node with pointer-events none, but keeps it in the text', async () => {
         const { session } = fixtureSession(page([{ ...BUTTON, pointerEvents: 'none' }]));
         const snapshot = await new PageState().capture(session, {});
         const button = snapshot.nodes.find(node => node.role === 'button');

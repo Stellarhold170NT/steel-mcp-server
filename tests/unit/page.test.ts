@@ -385,7 +385,7 @@ describe('BrowserPage.act — click', () => {
         expect(mouse[0]?.params).toMatchObject({ x: 340, y: 220 });
     });
 
-    it('normalizes a persistent no-node hit test after one layout retry', async () => {
+    it('falls back to a DOM-dispatched click when no painted node can be hit-tested', async () => {
         const fixture = actionFixture(fixtureSession(page([SAVE_BUTTON])));
         let boxReads = 0;
         fixture.stub('DOM.getBoxModel', () => {
@@ -400,40 +400,83 @@ describe('BrowserPage.act — click', () => {
         const browserPage = await openPage(fixture);
         await browserPage.snapshot({});
 
-        const error = await catchAsync(browserPage.act({ action: 'click', target: '@e1' }));
+        // The ref resolved and the box is real, but Chrome finds nothing painted at any
+        // candidate point: a lazily rendered control. No honest pointer route exists, so
+        // the click is dispatched on the node itself and the outcome says so.
+        const outcome = await browserPage.act({ action: 'click', target: '@e1' });
 
-        expect(error.code).toBe('click_blocked');
-        expect(error.message).toMatch(/steel_find|steel_snapshot/);
-        expect(error.message).not.toContain('DOM.getNodeForLocation');
-        expect(error.details).toMatchObject({
-            reason: 'no_node_at_location',
-            diagnostic: { candidate_points: 5, layout_reads: 2, pointer_dispatched: false },
-        });
+        expect(outcome.summary).toContain('DOM dispatch fallback');
         expect(boxReads).toBe(2);
         expect(fixture.sent.some(call => call.method === 'Input.dispatchMouseEvent')).toBe(false);
+        expect(
+            fixture.sent.some(
+                call =>
+                    call.method === 'Runtime.callFunctionOn' &&
+                    String(call.params?.functionDeclaration).includes('click')
+            )
+        ).toBe(true);
 
+        // The DOM route is a fresh evidence regime: a later quiet click there starts from
+        // a clean failure count instead of escalating to a repeat offence.
         await browserPage.snapshot({});
-        const repeated = await catchAsync(browserPage.act({ action: 'click', target: '@e1' }));
-        expect(repeated.message).toMatch(/still unstable after a fresh recovery/i);
-        expect(repeated.message).toMatch(/do not retry/i);
-        expect(repeated.details).toMatchObject({ handoff_required: true });
+        const again = await browserPage.act({ action: 'click', target: '@e1' });
+        expect(again.summary).toContain('DOM dispatch fallback');
         expect(boxReads).toBe(4);
     });
 
-    it('never dispatches an unverified click when hit-testing returns no node id', async () => {
+    
+    
+it('says the DOM fallback when a hit test answers no node id at all', async () => {
         const fixture = actionFixture(fixtureSession(page([SAVE_BUTTON])));
         fixture.stub('DOM.getNodeForLocation', () => ({}));
         const browserPage = await openPage(fixture);
         await browserPage.snapshot({});
 
-        const error = await catchAsync(browserPage.act({ action: 'click', target: '@e1' }));
+        // No candidate point names a target node, so no unverified pointer click is
+        // dispatched. The node itself still exists, so the click runs through the DOM
+        // and the outcome reports the fallback route it took.
+        const outcome = await browserPage.act({ action: 'click', target: '@e1' });
 
-        expect(error.code).toBe('click_blocked');
-        expect(error.message).toMatch(/no page node/i);
         expect(fixture.sent.some(call => call.method === 'Input.dispatchMouseEvent')).toBe(false);
+        expect(outcome.summary).toContain('DOM dispatch fallback');
     });
 
-    it('does not hide unrelated CDP failures or retry their layout', async () => {
+    
+    it('reports the checked state, re-dispatching once when a framework resets the checkbox', async () => {
+        const CHECKBOX: FixtureNode = {
+            tag: 'INPUT',
+            backendNodeId: 11,
+            role: 'checkbox',
+            name: 'Accept',
+            bounds: [100, 200, 80, 40],
+        };
+        const fixture = actionFixture(fixtureSession(page([CHECKBOX])), { hitBackendNodeId: 11 });
+        let checked = false;
+        let domClicks = 0;
+        fixture.stub('Runtime.callFunctionOn', params => {
+            const fn = String(params.functionDeclaration ?? '');
+            if (fn.includes('this.click()')) {
+                domClicks += 1;
+                checked = true;
+                return {};
+            }
+            return { result: { value: checked } };
+        });
+        const browserPage = await openPage(fixture);
+        await browserPage.snapshot({});
+
+        // The pointer click lands but a client framework resets the control, so the
+        // quiet state read says false. One DOM re-dispatch, and the outcome reports
+        // the state that actually stuck instead of a silent success.
+        const outcome = await browserPage.act({ action: 'check', target: '@e1' });
+
+        expect(domClicks).toBe(1);
+        expect(outcome.checked).toBe(true);
+        expect(outcome.summary).toContain('Target state: checked');
+    });
+
+    
+it('does not hide unrelated CDP failures or retry their layout', async () => {
         const fixture = actionFixture(fixtureSession(page([SAVE_BUTTON])));
         let boxReads = 0;
         fixture.stub('DOM.getBoxModel', () => {

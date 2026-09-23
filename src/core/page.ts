@@ -58,6 +58,8 @@ export interface ActOutcome {
     summary: string;
     change: ChangeSignal;
     changeDescription: string;
+    /** Present when the target is a checkbox or radio: its checked state after the action. */
+    checked?: boolean | undefined;
 }
 
 export interface NavigateOutcome {
@@ -108,6 +110,9 @@ const OVERLAY_DISMISS_NAMES =
 
 const DEFAULT_WAIT_TIMEOUT_MS = 10_000;
 const WAIT_POLL_INTERVAL_MS = 250;
+
+/** Roles whose checked state a click can flip, so the outcome reports the state that stuck. */
+const TOGGLE_ROLES = new Set(['checkbox', 'radio', 'menuitemcheckbox', 'menuitemradio', 'switch']);
 
 interface TargetHandle {
     backendNodeId: number;
@@ -598,6 +603,62 @@ export class BrowserPage {
         await this.session.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased' });
     }
 
+    /** Clicks a control, falling back to a DOM-dispatched click when Chrome has nothing painted to hit-test. */
+    private async dispatchClick(handle: TargetHandle): Promise<'pointer' | 'dom'> {
+        let point: Point;
+        try {
+            point = await this.reachablePoint(handle);
+        } catch (error) {
+            const reason = (error as { details?: { reason?: string } })?.details?.reason;
+            // Only the unpainted case falls through. A hidden or collapsed control
+            // (no_layout_box) and a covered one (a named blocker) stay blocked: clicking
+            // them through the DOM would act on a surface a person could never see.
+            if (reason !== 'no_node_at_location') throw error;
+            // reachablePoint already counted its hit-test attempts; the DOM route is a
+            // fresh evidence regime, so its quiet first click is judged on its own.
+            this.clearClickFailures();
+            // The node resolved from a ref, so it exists in the DOM; Chrome just has nothing
+            // painted at its coordinates to hit-test — a lazily rendered or virtualised
+            // control. A covered control (a real overlay) still throws above; only the
+            // unpainted case falls through to a DOM-dispatched click, and settleNow judges
+            // the outcome exactly as it judges a pointer click.
+            await this.domDispatchClick(handle);
+            return 'dom';
+        }
+        await this.clickAt(point);
+        return 'pointer';
+    }
+
+    /** Dispatches this.click() on the node itself — the same route the select action already takes. */
+    private async domDispatchClick(handle: TargetHandle): Promise<void> {
+        const objectId = await this.objectIdFor(handle);
+        if (!objectId) throw clickLayoutUnavailableError(handle.describe, true);
+        await this.session.send('Runtime.callFunctionOn', {
+            objectId,
+            functionDeclaration: 'function() { this.click(); }',
+        });
+    }
+
+    private async objectIdFor(handle: TargetHandle): Promise<string | undefined> {
+        const resolved = await this.session.send<{ object?: { objectId?: string } }>('DOM.resolveNode', {
+            backendNodeId: handle.backendNodeId,
+        });
+        return resolved.object?.objectId;
+    }
+
+    /** Reads the checked state of a checkbox/radio target so a silent framework reset is reported, not hidden. */
+    private async readToggleState(handle: TargetHandle): Promise<boolean | undefined> {
+        const objectId = await this.objectIdFor(handle);
+        if (!objectId) return undefined;
+        const state = await this.session.send<{ result?: { value?: unknown } }>('Runtime.callFunctionOn', {
+            objectId,
+            functionDeclaration:
+                'function() { return this instanceof HTMLInputElement && (this.type === "checkbox" || this.type === "radio") ? this.checked : undefined; }',
+            returnByValue: true,
+        });
+        return typeof state.result?.value === 'boolean' ? state.result.value : undefined;
+    }
+
     private async pressKey(name: string): Promise<void> {
         const key = NAMED_KEYS[name];
         if (!key) {
@@ -669,10 +730,9 @@ export class BrowserPage {
             case 'click':
             case 'check': {
                 const handle = await this.resolveTarget(this.requireTarget(request));
-                const point = await this.reachablePoint(handle);
                 const baseline = await this.beginChange(handle);
                 try {
-                    await this.clickAt(point);
+                    const via = await this.dispatchClick(handle);
                     const { change, description } = await this.settleNow(baseline, false, handle);
                     if (change.navigated || change.domMutated || change.focusChanged) {
                         this.clearClickFailures();
@@ -681,7 +741,24 @@ export class BrowserPage {
                         // so a quiet click there is neither a success nor a failure to count.
                         throw clickNoObservedChangeError(handle.describe);
                     }
-                    return { summary: `Clicked ${handle.describe}.`, change, changeDescription: description };
+                    const toggle = TOGGLE_ROLES.has(handle.node?.role ?? '');
+                    let checked = toggle ? await this.readToggleState(handle) : undefined;
+                    if (request.action === 'check' && checked === false) {
+                        // The click was dispatched but the control did not end up checked: a client
+                        // framework re-rendered and reset it. One DOM re-dispatch, then read the
+                        // truth again so the outcome reports the state that actually stuck.
+                        await this.domDispatchClick(handle);
+                        checked = await this.readToggleState(handle);
+                    }
+                    const fallback =
+                        via === 'dom' ? ' (DOM dispatch fallback: no painted surface to hit-test)' : '';
+                    const state = checked === undefined ? '' : ` Target state: ${checked ? 'checked' : 'not checked'}.`;
+                    return {
+                        summary: `Clicked ${handle.describe}.${fallback}${state}`,
+                        change,
+                        changeDescription: description,
+                        ...(checked !== undefined ? { checked } : {}),
+                    };
                 } finally {
                     baseline.dispose();
                 }
